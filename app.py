@@ -88,7 +88,7 @@ TRADE_COLS = ["trade_id", "ticker", "opt_type", "strike", "premium_per_share",
               "close_date", "closing_debit_per_share", "notes", "rolled_from_trade_id"]
 SEED_LOT_COLS = ["lot_id", "ticker", "shares", "cost_basis_per_share",
                   "open_date", "notes"]
-HOLDINGS_COLS = ["ticker", "shares", "notes"]
+HOLDINGS_COLS = ["ticker", "shares", "purchase_date", "notes"]
 DIV_COLS = ["div_id", "ticker", "shares_owned", "div_per_share",
             "payment_date", "notes"]
 
@@ -284,21 +284,28 @@ def compute_dividend_rate(dividends_df):
 # YAHOO FINANCE DIVIDEND SYNC
 # ============================================================================
 def sync_dividends_from_yfinance(holdings_df):
-    """Pulls each holding's full dividend history from Yahoo Finance and
-    applies the CURRENT share count from holdings_df to every past payment.
-    (Yahoo doesn't know how many shares you held in the past -- only you do
-    -- so this is an approximation of historical income, not your exact
-    received amount, unless your share count has stayed constant.)"""
+    """Pulls each holding's full dividend history from Yahoo Finance, then
+    KEEPS ONLY payments on or after that holding's purchase_date -- so
+    "dividends collected" reflects what you'd actually have received since
+    you bought in, not the stock's entire dividend history. Applies the
+    CURRENT share count from holdings_df to every kept payment. (Yahoo
+    doesn't know how many shares you held at each point in time -- only you
+    do -- so this is still an approximation if your share count has changed
+    since you bought.)"""
     rows = []
     for _, h in holdings_df.iterrows():
         ticker = str(h["ticker"]).upper()
         shares = float(h["shares"])
+        purchase_date = h.get("purchase_date")
+        purchase_ts = pd.Timestamp(purchase_date) if pd.notna(purchase_date) else None
         try:
             series = yf.Ticker(ticker).dividends
             for dt, amt in series.items():
                 ts = pd.Timestamp(dt)
                 if ts.tzinfo is not None:
                     ts = ts.tz_localize(None)
+                if purchase_ts is not None and ts < purchase_ts:
+                    continue  # paid before you owned the stock -- skip it
                 pay_date = ts.date().isoformat()
                 rows.append({
                     "div_id": f"{ticker}-{pay_date}", "ticker": ticker,
@@ -426,6 +433,12 @@ TIERS = [0, 100, 500, 1000, 2500, 5000, 10000, 25000]
 STAGE_LABELS = ["Bare soil", "Seedling", "Sprouting", "Growing",
                 "Young tree", "Small grove", "Orchard", "Full farm!"]
 TREE_COUNTS = [0, 1, 3, 6, 10, 16, 24, 36]
+FIELD_COUNTS = [0, 1, 1, 2, 2, 3, 3, 4]
+FIELD_POSITIONS = [(-3.4, -1.6), (-1.6, -3.4), (-3.6, -3.6), (1.6, -3.8)]
+
+BARN_WALL_COLOR = "#B03A2E"
+BARN_ROOF_COLOR = "#6B4A2A"
+BARN_CENTER = (-3.4, 3.2)
 
 
 def farm_stage(total):
@@ -443,7 +456,7 @@ def tree_positions(n):
     pts = []
     golden_angle = math.pi * (3 - math.sqrt(5))
     for i in range(n):
-        r = 0.55 * math.sqrt(i + 1)
+        r = 0.5 * math.sqrt(i + 1)
         theta = i * golden_angle
         pts.append((r * math.cos(theta), r * math.sin(theta)))
     return pts
@@ -467,8 +480,62 @@ def coin_pile_positions(total_div):
     return pts
 
 
+def build_field_patch(cx, cy, size=1.3, color="#DEB887"):
+    """A rectangular crop patch with a few furrow lines, sitting flush on the ground."""
+    half = size / 2
+    surface = go.Surface(
+        x=[[cx - half, cx + half], [cx - half, cx + half]],
+        y=[[cy - half, cy - half], [cy + half, cy + half]],
+        z=[[0.01, 0.01], [0.01, 0.01]],
+        showscale=False, colorscale=[[0, color], [1, color]], opacity=1, hoverinfo="skip",
+    )
+    lx, ly, lz = [], [], []
+    n_rows = 4
+    for i in range(n_rows):
+        yy = cy - half + (i + 0.5) * (size / n_rows)
+        lx += [cx - half + 0.05, cx + half - 0.05, None]
+        ly += [yy, yy, None]
+        lz += [0.015, 0.015, None]
+    furrows = go.Scatter3d(x=lx, y=ly, z=lz, mode="lines",
+                            line=dict(color="#8B6B3D", width=3), hoverinfo="skip", showlegend=False)
+    return [surface, furrows]
+
+
+def build_fields(n):
+    traces = []
+    for i in range(min(n, len(FIELD_POSITIONS))):
+        cx, cy = FIELD_POSITIONS[i]
+        traces += build_field_patch(cx, cy)
+    return traces
+
+
+def build_barn(cx, cy, base_z=0.0, w=1.4, d=1.0, h=0.75, roof_h=0.55):
+    """A simple red barn: a box (Mesh3d) topped with a triangular-prism roof (Mesh3d)."""
+    wx, wy = w / 2, d / 2
+    # Box corners: 0-3 bottom, 4-7 top
+    bx = [cx - wx, cx + wx, cx + wx, cx - wx, cx - wx, cx + wx, cx + wx, cx - wx]
+    by = [cy - wy, cy - wy, cy + wy, cy + wy, cy - wy, cy - wy, cy + wy, cy + wy]
+    bz = [base_z, base_z, base_z, base_z, base_z + h, base_z + h, base_z + h, base_z + h]
+    walls = go.Mesh3d(
+        x=bx, y=by, z=bz,
+        i=[0, 0, 3, 3, 0, 0, 1, 1], j=[1, 5, 2, 6, 3, 7, 2, 6], k=[5, 4, 6, 7, 7, 4, 6, 5],
+        color=BARN_WALL_COLOR, opacity=1, flatshading=True, hoverinfo="skip", showlegend=False,
+    )
+    # Roof: top-of-box edge (v4..v7) up to a ridge line running along y at x=cx
+    rx = [cx - wx, cx + wx, cx + wx, cx - wx, cx, cx]
+    ry = [cy - wy, cy - wy, cy + wy, cy + wy, cy - wy, cy + wy]
+    rz = [base_z + h] * 4 + [base_z + h + roof_h] * 2
+    roof = go.Mesh3d(
+        x=rx, y=ry, z=rz,
+        i=[0, 0, 1, 1, 0, 3], j=[3, 5, 2, 5, 1, 2], k=[5, 4, 5, 4, 4, 5],
+        color=BARN_ROOF_COLOR, opacity=1, flatshading=True, hoverinfo="skip", showlegend=False,
+    )
+    return [walls, roof]
+
+
 def build_farm_3d(stage_idx, total_dividends):
-    """A rotatable 3D farm scene: ground plane + grove of trees + a gold coin pile."""
+    """A rotatable 3D farm scene: ground plane, a grove of trees, crop fields,
+    a barn, and a gold coin pile."""
     fig = go.Figure()
 
     # Ground
@@ -478,21 +545,29 @@ def build_farm_3d(stage_idx, total_dividends):
         lighting=dict(diffuse=0.9, ambient=0.55, specular=0.1), hoverinfo="skip",
     ))
 
-    # Trees: brown trunk lines + green canopy markers
+    # Trees: taller brown trunk lines + green canopy markers
     positions = tree_positions(TREE_COUNTS[stage_idx])
     if positions:
         tx, ty, tz = [], [], []
         for (x, y) in positions:
             tx += [x, x, None]
             ty += [y, y, None]
-            tz += [0, 0.5, None]
+            tz += [0, 0.9, None]
         fig.add_trace(go.Scatter3d(x=tx, y=ty, z=tz, mode="lines",
-                                    line=dict(color=SOIL, width=8),
+                                    line=dict(color=SOIL, width=9),
                                     hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter3d(
             x=[p[0] for p in positions], y=[p[1] for p in positions],
-            z=[0.55] * len(positions), mode="markers",
-            marker=dict(size=16, color=GREEN, opacity=0.95), hoverinfo="skip", showlegend=False))
+            z=[0.98] * len(positions), mode="markers",
+            marker=dict(size=20, color=GREEN, opacity=0.95), hoverinfo="skip", showlegend=False))
+
+    # Crop fields
+    for trace in build_fields(FIELD_COUNTS[stage_idx]):
+        fig.add_trace(trace)
+
+    # Barn (always present — the farmstead itself)
+    for trace in build_barn(*BARN_CENTER):
+        fig.add_trace(trace)
 
     # Gold coin pile
     coins = coin_pile_positions(total_dividends)
@@ -507,8 +582,8 @@ def build_farm_3d(stage_idx, total_dividends):
         scene=dict(
             xaxis=dict(visible=False, range=[-5, 5]),
             yaxis=dict(visible=False, range=[-5, 5]),
-            zaxis=dict(visible=False, range=[0, 3]),
-            aspectmode="manual", aspectratio=dict(x=1, y=1, z=0.35),
+            zaxis=dict(visible=False, range=[0, 3.5]),
+            aspectmode="manual", aspectratio=dict(x=1, y=1, z=0.4),
             camera=dict(eye=dict(x=1.35, y=1.35, z=0.85)),
             bgcolor=SKY,
         ),
@@ -756,12 +831,14 @@ def render_dividends(div_df, holdings_df):
         html.Div([
             html.H4("Your holdings", style={"color": GOLD}),
             html.Div("Dividend payments are pulled automatically from Yahoo Finance for "
-                      "these tickers — you don't log payments by hand. Your current share "
-                      "count is applied to the whole pulled history (see note in the script "
-                      "if your share count has changed over time).",
+                      "these tickers, starting from your purchase date — earlier history "
+                      "isn't counted since you didn't own the stock yet. Your current share "
+                      "count is applied to every kept payment (see note in the script if "
+                      "your share count has changed since you bought).",
                       style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
             field("Ticker", dcc.Input(id="in-hold-ticker", type="text", style=INPUT_STYLE, placeholder="e.g. KO")),
             field("Current shares", dcc.Input(id="in-hold-shares", type="number", style=INPUT_STYLE)),
+            field("Purchase date", dcc.DatePickerSingle(id="in-hold-purchasedate", date=date.today(), style=INPUT_STYLE)),
             html.Button("➕ Add / update holding", id="btn-add-holding", style=GOLD_BTN_STYLE),
             dash_table.DataTable(
                 data=holdings_df.to_dict("records"), columns=[{"name": c, "id": c} for c in HOLDINGS_COLS],
@@ -903,18 +980,20 @@ def add_trade(n, ticker, opttype, strike, premium, contracts, opendate, expdate,
     Output("store-holdings", "data", allow_duplicate=True),
     Output("save-status", "children", allow_duplicate=True),
     Input("btn-add-holding", "n_clicks"),
-    State("in-hold-ticker", "value"), State("in-hold-shares", "value"), State("store-holdings", "data"),
+    State("in-hold-ticker", "value"), State("in-hold-shares", "value"),
+    State("in-hold-purchasedate", "date"), State("store-holdings", "data"),
     prevent_initial_call=True,
 )
-def add_or_update_holding(n, ticker, shares, holdings_json):
+def add_or_update_holding(n, ticker, shares, purchase_date, holdings_json):
     if not n or not ticker or shares is None:
         return no_update, "⚠️ Fill in ticker and shares."
     holdings_df = pd.read_json(holdings_json, orient="split") if holdings_json else pd.DataFrame(columns=HOLDINGS_COLS)
     ticker = ticker.upper()
     if not holdings_df.empty and (holdings_df["ticker"] == ticker).any():
         holdings_df.loc[holdings_df["ticker"] == ticker, "shares"] = shares
+        holdings_df.loc[holdings_df["ticker"] == ticker, "purchase_date"] = purchase_date
     else:
-        new_row = {"ticker": ticker, "shares": shares, "notes": ""}
+        new_row = {"ticker": ticker, "shares": shares, "purchase_date": purchase_date, "notes": ""}
         holdings_df = pd.concat([holdings_df, pd.DataFrame([new_row])], ignore_index=True)
     ok = save_csv_to_github(FILES["holdings"], holdings_df, f"Add/update holding {ticker}")
     msg = "✅ Saved to GitHub — hit Sync to pull its dividend history" if ok else "❌ GitHub save failed — check token/repo config"
