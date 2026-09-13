@@ -57,7 +57,7 @@ from dash import Dash, dcc, html, Input, Output, State, ctx, dash_table, no_upda
 # CONFIG — edit these two, then set GITHUB_TOKEN as a Render environment
 # variable (never hard-code the token itself here — see README.md)
 # ============================================================================
-GITHUB_OWNER = "your-github-username"
+GITHUB_OWNER = "vladk-III"
 GITHUB_REPO = "options-dividend-tracker"      # repo must already exist
 GITHUB_BRANCH = "main"
 DATA_DIR = "data"                              # folder inside the repo
@@ -598,20 +598,48 @@ def build_farm_3d(stage_idx, total_dividends):
 # ============================================================================
 app = Dash(__name__, suppress_callback_exceptions=True)
 server = app.server  # exposes the underlying Flask app for gunicorn ("app:server")
-app.title = "🌾 Options & Dividend Farm"
+app.title = "Options & Dividend Farm"
 
-VIEWPORT = {
-    "name": "viewport",
-    "content": "width=device-width, initial-scale=1, maximum-scale=1",
-}
 app.index_string = """<!DOCTYPE html><html><head>{%metas%}<title>{%title%}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #2E7D32; --gold: #D4AF37; --sky: #EAF6EC;
+    --ink: #26302a; --muted: #6b756b; --line: #e1e7e1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--sky); color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .app-shell { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+  .app-header { text-align: center; margin-bottom: 4px; }
+  .app-header h2 { font-size: 25px; font-weight: 700; color: var(--green); margin: 0; letter-spacing: -0.01em; }
+  .app-subtitle { text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 8px; }
+  .status-line { text-align: center; font-size: 12.5px; color: var(--muted); min-height: 18px; }
+  .ticker-banner {
+    text-align: center; font-size: 14px; font-weight: 600; color: #8a6d00;
+    background: #fffaf0; border: 1px solid #eecf7a; border-radius: 12px;
+    padding: 10px; margin: 6px 0 8px;
+  }
+  .tabs-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-bottom: 1px solid var(--line); margin: 18px 0 20px; }
+  .tabs-wrap::-webkit-scrollbar { height: 0; }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+  @media (max-width: 680px) {
+    .app-shell { padding: 16px 12px 40px; }
+    .app-header h2 { font-size: 20px; }
+    .card-grid { grid-template-columns: 1fr; gap: 12px; }
+  }
+</style>
 {%favicon%}{%css%}</head><body>{%app_entry%}<footer>{%config%}{%scripts%}{%renderer%}
 </footer></body></html>"""
 
 CARD_STYLE = {
-    "background": "white", "borderRadius": "16px", "padding": "16px",
-    "margin": "10px 0", "boxShadow": "0 2px 8px rgba(0,0,0,0.08)",
+    "background": "white", "borderRadius": "16px", "padding": "18px",
+    "boxShadow": "0 1px 3px rgba(20,30,20,0.08), 0 1px 2px rgba(20,30,20,0.04)",
 }
 INPUT_STYLE = {"width": "100%", "padding": "10px", "marginBottom": "10px",
                "borderRadius": "8px", "border": "1px solid #ccc", "fontSize": "16px"}
@@ -620,34 +648,40 @@ BTN_STYLE = {"width": "100%", "padding": "12px", "borderRadius": "10px",
              "fontSize": "16px", "fontWeight": "bold", "marginTop": "6px"}
 GOLD_BTN_STYLE = {**BTN_STYLE, "background": GOLD, "color": "#3a2f00"}
 
+TAB_STYLE = {"padding": "12px 16px", "border": "none", "borderBottom": "3px solid transparent",
+             "color": "#6b756b", "fontWeight": "500", "fontSize": "14px",
+             "whiteSpace": "nowrap", "background": "transparent"}
+TAB_SELECTED_STYLE = {**TAB_STYLE, "borderBottom": f"3px solid {DARK_GREEN}",
+                       "color": DARK_GREEN, "fontWeight": "700"}
+
 
 def field(label, comp):
     return html.Div([html.Label(label, style={"fontWeight": "600", "fontSize": "14px"}), comp])
 
 
-app.layout = html.Div(style={"background": SKY, "minHeight": "100vh",
-                              "fontFamily": "Helvetica, Arial, sans-serif",
-                              "maxWidth": "480px", "margin": "0 auto", "padding": "10px"}, children=[
+TABS = [
+    ("farm", "🌻 Farm"), ("options", "📝 Options"), ("dividends", "💵 Dividends"),
+    ("calendar", "📅 Calendar"), ("growth", "📈 Growth"), ("lots", "🌱 Lots"),
+]
+
+app.layout = html.Div(className="app-shell", children=[
     dcc.Store(id="store-trades"),
     dcc.Store(id="store-seedlots"),
     dcc.Store(id="store-holdings"),
     dcc.Store(id="store-dividends"),
     dcc.Store(id="store-dividend-rate"),
     dcc.Interval(id="ticker-interval", interval=1000, n_intervals=0),
-    html.H2("🌾 Options & Dividend Farm", style={"textAlign": "center", "color": DARK_GREEN}),
-    html.Div(id="save-status", style={"textAlign": "center", "fontSize": "13px", "color": "#888"}),
-    html.Div(id="dividend-ticker-display", style={
-        "textAlign": "center", "fontSize": "15px", "fontWeight": "bold", "color": GOLD,
-        "background": "#fffbe8", "border": f"1px solid {GOLD}", "borderRadius": "10px",
-        "padding": "8px", "margin": "6px 0"}),
+    html.Div(className="app-header", children=[html.H2("🌾 Options & Dividend Farm")]),
+    html.Div("Options premium, dividends, and cost basis — tracked in one place.",
+             className="app-subtitle"),
+    html.Div(id="save-status", className="status-line"),
+    html.Div(id="dividend-ticker-display", className="ticker-banner"),
 
-    dcc.Tabs(id="tabs", value="farm", children=[
-        dcc.Tab(label="🌻 Farm", value="farm"),
-        dcc.Tab(label="📝 Options", value="options"),
-        dcc.Tab(label="💵 Dividends", value="dividends"),
-        dcc.Tab(label="📅 Calendar", value="calendar"),
-        dcc.Tab(label="📈 Growth", value="growth"),
-        dcc.Tab(label="🌱 Lots", value="lots"),
+    html.Div(className="tabs-wrap", children=[
+        dcc.Tabs(id="tabs", value="farm", style={"border": "none"},
+                 children=[dcc.Tab(label=label, value=value, style=TAB_STYLE,
+                                    selected_style=TAB_SELECTED_STYLE)
+                           for value, label in TABS]),
     ]),
     html.Div(id="tab-content"),
 ])
@@ -657,7 +691,7 @@ app.layout = html.Div(style={"background": SKY, "minHeight": "100vh",
 def render_farm(s):
     stage_idx, stage_label, progress, next_tier = farm_stage(s["total_farm_income"])
     fig = build_farm_3d(stage_idx, s["total_dividends"])
-    return html.Div([
+    return html.Div(className="card-grid", children=[
         html.Div([
             html.Div(stage_label, style={"textAlign": "center", "fontWeight": "bold",
                                           "color": DARK_GREEN, "marginBottom": "4px"}),
@@ -694,7 +728,7 @@ def render_farm(s):
 # ---- TAB: OPTIONS TRADES ---------------------------------------------------
 def render_options(trades_df):
     table_df = trades_df.copy()
-    return html.Div([
+    return html.Div(className="card-grid", children=[
         html.Div([
             html.H4("Log an options trade", style={"color": DARK_GREEN}),
             field("Ticker", dcc.Input(id="in-ticker", type="text", style=INPUT_STYLE, placeholder="e.g. AAPL")),
@@ -717,7 +751,7 @@ def render_options(trades_df):
 
         html.Div([
             html.H4("🔁 Roll an existing trade", style={"color": DARK_GREEN}),
-            html.Div("Closes the selected trade and automatically opens the new one, linked together.",
+            html.Div("Closes the old option and opens the new one in a single step.",
                       style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
             field("Trade to roll", dcc.Dropdown(id="in-roll-select", options=open_trade_options(trades_df),
                                                   style=INPUT_STYLE, placeholder="Select an open trade")),
@@ -753,12 +787,12 @@ def open_trade_options(trades_df):
 def render_calendar(div_df):
     fields = build_calendar_fields(div_df)
     if not fields:
-        return html.Div([html.Div("Log some dividends to see your calendar 🌾",
+        return html.Div([html.Div("Add a holding to see your dividend calendar.",
                                     style={"textAlign": "center", "color": "#666"})], style=CARD_STYLE)
     cards = []
     for f in fields:
-        harvest_note = " — harvest ready! 🎉" if f["progress"] >= 1.0 else ""
-        cadence_note = ("estimated cadence (only 1 payment logged so far)" if f["estimated_cadence"]
+        harvest_note = " — ready! 🎉" if f["progress"] >= 1.0 else ""
+        cadence_note = ("cadence estimated — log one more payment for accuracy" if f["estimated_cadence"]
                          else f"~every {f['interval_days']} days")
         cards.append(html.Div([
             html.Div([
@@ -770,11 +804,11 @@ def render_calendar(div_df):
                       children=html.Div(style={"width": f"{f['progress']*100:.0f}%",
                                                 "background": GREEN, "height": "100%"})),
             html.Div(f"{f['progress']*100:.0f}% grown{harvest_note}", style={"fontSize": "12px", "color": "#666"}),
-            html.Div(f"🗓️ Est. next payment: {f['next_date'].date()}  (~${f['est_amount']:,.2f})",
+            html.Div(f"Next payment (est.): {f['next_date'].date()} · ~${f['est_amount']:,.2f}",
                       style={"fontSize": "13px", "marginTop": "4px"}),
             html.Div(cadence_note, style={"fontSize": "11px", "color": "#999"}),
         ], style=CARD_STYLE))
-    return html.Div(cards)
+    return html.Div(className="card-grid", children=cards)
 
 
 # ---- TAB: FUTURE DIVIDEND GROWTH -------------------------------------------
@@ -785,12 +819,12 @@ def render_growth(div_df):
     table_rows = [{"ticker": tkr, "ttm_income": round(s["ttm"], 2),
                     "historical_annual_growth_pct": round(s["cagr"] * 100, 2)}
                    for tkr, s in stats.items()]
-    return html.Div([
+    return html.Div(className="card-grid", children=[
         html.Div([
             html.H4("📈 Future Dividend Forest", style={"color": GOLD}),
-            html.Div("Projects your total dividend income forward using each stock's own "
-                      "historical dividend-growth rate, assuming your current share counts "
-                      "(no reinvestment). Override below to test a flat rate for everything.",
+            html.Div("Projects income forward using each stock's historical growth rate "
+                      "and current share count. No reinvestment assumed — "
+                      "override below for a flat rate instead.",
                       style={"fontSize": "12px", "color": "#666"}),
             field("Override growth rate % (optional, applies to all tickers)",
                   dcc.Input(id="in-growth-override", type="number", placeholder="e.g. 5", style=INPUT_STYLE)),
@@ -827,14 +861,12 @@ def render_dividends(div_df, holdings_df):
                        margin=dict(l=30, r=10, t=40, b=30), height=280,
                        legend=dict(orientation="h"))
 
-    return html.Div([
+    return html.Div(className="card-grid", children=[
         html.Div([
             html.H4("Your holdings", style={"color": GOLD}),
-            html.Div("Dividend payments are pulled automatically from Yahoo Finance for "
-                      "these tickers, starting from your purchase date — earlier history "
-                      "isn't counted since you didn't own the stock yet. Your current share "
-                      "count is applied to every kept payment (see note in the script if "
-                      "your share count has changed since you bought).",
+            html.Div("Synced automatically from Yahoo Finance, starting from your "
+                      "purchase date. Your current share count applies across the "
+                      "whole history — update it here if your position size changes.",
                       style={"fontSize": "12px", "color": "#666", "marginBottom": "6px"}),
             field("Ticker", dcc.Input(id="in-hold-ticker", type="text", style=INPUT_STYLE, placeholder="e.g. KO")),
             field("Current shares", dcc.Input(id="in-hold-shares", type="number", style=INPUT_STYLE)),
@@ -861,7 +893,7 @@ def render_dividends(div_df, holdings_df):
 # ---- TAB: LOTS / COST BASIS ------------------------------------------------
 def render_lots(s, seed_lots_df):
     lots_df = s["lots_df"]
-    return html.Div([
+    return html.Div(className="card-grid", children=[
         html.Div([
             html.H4("Seed a starting lot (shares you already owned)", style={"color": DARK_GREEN}),
             field("Ticker", dcc.Input(id="in-lot-ticker", type="text", style=INPUT_STYLE)),
@@ -941,8 +973,8 @@ app.clientside_callback(
         const elapsedSec = (Date.now() - rateData.start_epoch_ms) / 1000;
         const current = rateData.base + rateData.rate_per_sec * elapsedSec;
         const perSec = rateData.rate_per_sec;
-        return "💧 Dividend income ticking: $" + current.toFixed(4) +
-               "  (~$" + perSec.toFixed(6) + "/sec avg run-rate)";
+        return "💧 $" + current.toFixed(4) + " earned to date  ·  ~$" +
+               perSec.toFixed(6) + "/sec avg";
     }
     """,
     Output("dividend-ticker-display", "children"),
