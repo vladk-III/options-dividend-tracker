@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: options-dividend-farm
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:server -b 0.0.0.0:$PORT"
+    envVars:
+      - key: GITHUB_TOKEN
+        sync: false   # set this manually in the Render dashboard — never commit it
