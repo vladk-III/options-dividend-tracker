@@ -1,3 +1,4 @@
 trade_id,ticker,opt_type,strike,premium_per_share,contracts,open_date,expiration_date,status,close_date,closing_debit_per_share,notes,rolled_from_trade_id
 bf5ad645,FIG,CC,26.0,0.11,1,2026-09-11,2026-09-18,open,,,,
 9d608767,SPCE,CC,3.5,0.11,1,2026-09-10,2026-10-09,open,,,,
+f9c8dbf5,FIG,CC,31.5,0.26,1,2026-08-28,2026-09-04,expired_worthless,,,,
