@@ -1,0 +1,2 @@
+trade_id,ticker,opt_type,strike,premium_per_share,contracts,open_date,expiration_date,status,close_date,closing_debit_per_share,notes,rolled_from_trade_id
+63632195,RKLB,CC,69.0,0.17,1.0,2026-09-01,2026-09-04,expired_worthless,,,,
