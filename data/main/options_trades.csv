@@ -1,5 +1,5 @@
 trade_id,ticker,opt_type,strike,premium_per_share,contracts,open_date,expiration_date,status,close_date,closing_debit_per_share,notes,rolled_from_trade_id
-bf5ad645,FIG,CC,26.0,0.11,1,2026-09-11,2026-09-18,open,,,,
+bf5ad645,FIG,CC,26.0,0.11,1,2026-09-11,2026-09-18,rolled,2026-09-15,0.0,,
 9d608767,SPCE,CC,3.5,0.11,1,2026-09-10,2026-10-09,open,,,,
 f9c8dbf5,FIG,CC,31.5,0.26,1,2026-08-28,2026-09-04,expired_worthless,,,,
 15ff82fc,FIG,CC,30.0,0.19,1,2026-08-24,2026-08-28,expired_worthless,,,,
@@ -10,4 +10,5 @@ ef45f998,FIG,CC,30.0,1.05,1,2026-07-28,2026-08-14,expired_worthless,,,,
 e62c0117,FIG,CC,26.0,0.05,1,2026-06-08,2026-06-12,expired_worthless,,,,
 1a2baf5e,FIG,CC,26.5,1.01,1,2026-06-01,2026-06-05,expired_worthless,,,,
 ba06f850,SPCE,CC,9.0,3.05,1,2026-06-01,2026-06-18,expired_worthless,,,,
-e8f5b485,FIG,CC,23.5,0.35,1,2026-05-26,2026-05-29,open,,,,
+e8f5b485,FIG,CC,23.5,0.35000000000000003,1,2026-05-26,2026-05-29,open,,,,
+ba70e06b,FIG,CC,26.0,0.39,1,2026-09-15,2026-09-25,open,,,Rolled from bf5ad645,bf5ad645
